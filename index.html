@@ -144,6 +144,15 @@
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
         }
+        .debug-info {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: 0.8rem;
+        }
     </style>
 </head>
 <body>
@@ -190,6 +199,9 @@
                     <button class="btn btn-custom" onclick="toggleMute()">
                         <i class="bi bi-volume-up" id="muteIcon"></i> Mute
                     </button>
+                    <button class="btn btn-custom" onclick="toggleDebug()">
+                        <i class="bi bi-bug"></i> Debug
+                    </button>
                 </div>
                 
                 <div class="channel-info">
@@ -197,6 +209,7 @@
                     <div id="channelDetails">
                         <p class="text-muted mb-0">Choose from the channel list on the left</p>
                     </div>
+                    <div id="debugInfo" class="debug-info d-none"></div>
                 </div>
             </div>
         </div>
@@ -218,6 +231,7 @@
         let channels = [];
         let currentPlayer = null;
         let currentChannel = null;
+        let debugMode = false;
 
         // Initialize the app
         document.addEventListener('DOMContentLoaded', function() {
@@ -308,16 +322,41 @@
                 // Use proxy URL
                 const proxyUrl = `/api/proxy?url=${encodeURIComponent(channel.url)}`;
                 
+                if (debugMode) {
+                    document.getElementById('debugInfo').innerHTML = `
+                        <p><strong>Original URL:</strong> ${channel.url}</p>
+                        <p><strong>Proxy URL:</strong> ${proxyUrl}</p>
+                        <p><strong>License Key:</strong> ${channel.licenseKey || 'None'}</p>
+                    `;
+                }
+                
                 if (channel.type === 'hls') {
                     if (Hls.isSupported()) {
                         const hls = new Hls({
-                            debug: true,
+                            debug: debugMode,
                             enableWorker: true,
                             lowLatencyMode: true,
                             backBufferLength: 90
                         });
                         hls.loadSource(proxyUrl);
                         hls.attachMedia(video);
+                        
+                        hls.on(Hls.Events.ERROR, function(event, data) {
+                            if (data.fatal) {
+                                switch(data.type) {
+                                    case Hls.ErrorTypes.NETWORK_ERROR:
+                                        showError('Network error. Please check your connection.');
+                                        break;
+                                    case Hls.ErrorTypes.MEDIA_ERROR:
+                                        showError('Media error. The stream format might not be supported.');
+                                        break;
+                                    default:
+                                        showError('An error occurred while playing the stream.');
+                                        break;
+                                }
+                            }
+                        });
+                        
                         currentPlayer = hls;
                     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
                         video.src = proxyUrl;
@@ -342,6 +381,14 @@
                             }
                         });
                     }
+                    
+                    player.on(dashjs.MediaPlayer.events.ERROR, function(e) {
+                        if (debugMode) {
+                            console.error('DASH error:', e);
+                            document.getElementById('debugInfo').innerHTML += `<p><strong>DASH Error:</strong> ${JSON.stringify(e)}</p>`;
+                        }
+                        showError('Error loading DASH stream');
+                    });
                     
                     player.initialize(video, proxyUrl, false);
                     currentPlayer = player;
@@ -377,6 +424,16 @@
             const icon = document.getElementById('muteIcon');
             video.muted = !video.muted;
             icon.className = video.muted ? 'bi bi-volume-mute' : 'bi bi-volume-up';
+        }
+
+        function toggleDebug() {
+            debugMode = !debugMode;
+            const debugInfo = document.getElementById('debugInfo');
+            if (debugMode) {
+                debugInfo.classList.remove('d-none');
+            } else {
+                debugInfo.classList.add('d-none');
+            }
         }
 
         function showError(message) {
