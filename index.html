@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IPTV Player</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .main-container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            margin: 20px auto;
+            max-width: 1400px;
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(90deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        .channel-sidebar {
+            background: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+            height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+        .channel-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e9ecef;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+        }
+        .channel-item:hover {
+            background: #e3f2fd;
+            transform: translateX(5px);
+        }
+        .channel-item.active {
+            background: linear-gradient(90deg, #3498db 0%, #2980b9 100%);
+            color: white;
+        }
+        .channel-logo {
+            width: 50px;
+            height: 40px;
+            object-fit: contain;
+            margin-right: 12px;
+            border-radius: 5px;
+            background: white;
+            padding: 3px;
+        }
+        .group-header {
+            background: #2c3e50;
+            color: white;
+            padding: 10px 15px;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .video-container {
+            background: #000;
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .video-player {
+            width: 100%;
+            height: 500px;
+            background: #000;
+        }
+        .search-box {
+            padding: 15px;
+            background: white;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .channel-info {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+        }
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5rem;
+            z-index: 100;
+        }
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+        }
+        .channel-number {
+            background: #3498db;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            margin-right: 8px;
+        }
+        .player-controls {
+            background: #2c3e50;
+            padding: 15px;
+            border-radius: 0 0 10px 10px;
+        }
+        .btn-custom {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            border: none;
+            color: white;
+            padding: 8px 20px;
+            border-radius: 25px;
+            transition: all 0.3s;
+        }
+        .btn-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <div class="header">
+            <h1><i class="bi bi-broadcast"></i> IPTV Player</h1>
+            <p class="mb-0">Stream your favorite channels</p>
+        </div>
+        
+        <div class="row g-0">
+            <div class="col-md-4 channel-sidebar">
+                <div class="search-box">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="searchInput" class="form-control" placeholder="Search channels...">
+                    </div>
+                </div>
+                
+                <div id="channelList">
+                    <!-- Channels will be populated here -->
+                </div>
+            </div>
+            
+            <div class="col-md-8 p-4">
+                <div class="video-container">
+                    <video id="videoPlayer" class="video-player" controls></video>
+                    <div id="loadingOverlay" class="loading-overlay d-none">
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <div class="mt-2">Loading Channel...</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="player-controls d-flex gap-2 mt-2">
+                    <button class="btn btn-custom" onclick="toggleFullscreen()">
+                        <i class="bi bi-fullscreen"></i> Fullscreen
+                    </button>
+                    <button class="btn btn-custom" onclick="refreshStream()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                    <button class="btn btn-custom" onclick="toggleMute()">
+                        <i class="bi bi-volume-up" id="muteIcon"></i> Mute
+                    </button>
+                </div>
+                
+                <div class="channel-info">
+                    <h4 id="channelName"><i class="bi bi-tv"></i> Select a channel to play</h4>
+                    <div id="channelDetails">
+                        <p class="text-muted mb-0">Choose from the channel list on the left</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container">
+        <div id="errorToast" class="toast align-items-center text-white bg-danger border-0" role="alert">
+            <div class="d-flex">
+                <div class="toast-body" id="errorMessage">
+                    Error loading channel
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let channels = [];
+        let currentPlayer = null;
+        let currentChannel = null;
+
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            loadChannels();
+            setupEventListeners();
+        });
+
+        async function loadChannels() {
+            try {
+                const response = await fetch('/api/playlist');
+                channels = await response.json();
+                renderChannelList();
+            } catch (error) {
+                console.error('Error loading channels:', error);
+                showError('Failed to load channel list');
+            }
+        }
+
+        function renderChannelList(searchTerm = '') {
+            const channelList = document.getElementById('channelList');
+            channelList.innerHTML = '';
+            
+            const filteredChannels = channels.filter(channel => 
+                channel.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                channel.group.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+            
+            let currentGroup = '';
+            
+            filteredChannels.forEach(channel => {
+                if (channel.group !== currentGroup) {
+                    currentGroup = channel.group;
+                    const groupHeader = document.createElement('div');
+                    groupHeader.className = 'group-header';
+                    groupHeader.innerHTML = `<i class="bi bi-folder-fill"></i> ${currentGroup}`;
+                    channelList.appendChild(groupHeader);
+                }
+                
+                const channelItem = document.createElement('div');
+                channelItem.className = 'channel-item';
+                channelItem.innerHTML = `
+                    <img src="${channel.logo}" alt="${channel.name}" class="channel-logo" onerror="this.src='https://via.placeholder.com/50x40?text=TV'">
+                    <div>
+                        <div><span class="channel-number">${channel.number}</span>${channel.name}</div>
+                        <small class="text-muted">${channel.type.toUpperCase()}</small>
+                    </div>
+                `;
+                channelItem.onclick = () => playChannel(channel);
+                channelList.appendChild(channelItem);
+            });
+        }
+
+        function setupEventListeners() {
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                renderChannelList(e.target.value);
+            });
+        }
+
+        async function playChannel(channel) {
+            // Update active state
+            document.querySelectorAll('.channel-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.currentTarget.classList.add('active');
+            
+            // Show loading
+            document.getElementById('loadingOverlay').classList.remove('d-none');
+            
+            // Update channel info
+            document.getElementById('channelName').innerHTML = `<i class="bi bi-tv"></i> ${channel.name}`;
+            document.getElementById('channelDetails').innerHTML = `
+                <p class="mb-1"><strong>Channel:</strong> ${channel.number} - ${channel.name}</p>
+                <p class="mb-1"><strong>Group:</strong> ${channel.group}</p>
+                <p class="mb-0"><strong>Stream Type:</strong> ${channel.type.toUpperCase()}</p>
+            `;
+            
+            // Stop previous player
+            if (currentPlayer) {
+                if (currentPlayer.destroy) {
+                    currentPlayer.destroy();
+                }
+                currentPlayer = null;
+            }
+            
+            const video = document.getElementById('videoPlayer');
+            
+            try {
+                // Use proxy URL
+                const proxyUrl = `/api/proxy?url=${encodeURIComponent(channel.url)}`;
+                
+                if (channel.type === 'hls') {
+                    if (Hls.isSupported()) {
+                        const hls = new Hls({
+                            debug: true,
+                            enableWorker: true,
+                            lowLatencyMode: true,
+                            backBufferLength: 90
+                        });
+                        hls.loadSource(proxyUrl);
+                        hls.attachMedia(video);
+                        currentPlayer = hls;
+                    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                        video.src = proxyUrl;
+                    }
+                } else if (channel.type === 'dash') {
+                    const player = dashjs.MediaPlayer().create();
+                    
+                    // Configure DRM if needed
+                    if (channel.licenseKey) {
+                        const [keyId, key] = channel.licenseKey.split(':');
+                        player.updateSettings({
+                            streaming: {
+                                drm: {
+                                    clearKeys: {
+                                        'org.w3.clearkey': {
+                                            clearkeys: {
+                                                [keyId]: key
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                    
+                    player.initialize(video, proxyUrl, false);
+                    currentPlayer = player;
+                }
+                
+                await video.play();
+                currentChannel = channel;
+            } catch (error) {
+                console.error('Error playing channel:', error);
+                showError('Failed to load channel: ' + error.message);
+            } finally {
+                document.getElementById('loadingOverlay').classList.add('d-none');
+            }
+        }
+
+        function toggleFullscreen() {
+            const video = document.getElementById('videoPlayer');
+            if (!document.fullscreenElement) {
+                video.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function refreshStream() {
+            if (currentChannel) {
+                playChannel(currentChannel);
+            }
+        }
+
+        function toggleMute() {
+            const video = document.getElementById('videoPlayer');
+            const icon = document.getElementById('muteIcon');
+            video.muted = !video.muted;
+            icon.className = video.muted ? 'bi bi-volume-mute' : 'bi bi-volume-up';
+        }
+
+        function showError(message) {
+            document.getElementById('errorMessage').textContent = message;
+            const toast = new bootstrap.Toast(document.getElementById('errorToast'));
+            toast.show();
+        }
+    </script>
+</body>
+</html>
